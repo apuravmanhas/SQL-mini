@@ -1,20 +1,20 @@
 """
-VerityTick — Database Setup and Migration Tool
+VerityTick — Database Setup, Migration & Seeding Tool
 
 Creates the database and applies versioned SQL migrations in order.
-Safe to run repeatedly: tracks applied migrations in a version table.
+Safe to run repeatedly: tracks applied migrations in public.schema_migrations.
 """
 
 import os
 import sys
 import glob
+import argparse
 import psycopg2
 from psycopg2 import sql
 
 
-def get_connection_params():
+def get_connection_params(use_test_db=False):
     """Read connection parameters from environment or .env file."""
-    # Try loading .env if it exists
     env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
     if os.path.exists(env_path):
         with open(env_path) as f:
@@ -22,14 +22,19 @@ def get_connection_params():
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     key, _, value = line.partition('=')
-                    os.environ.setdefault(key.strip(), value.strip())
+                    key, value = key.strip(), value.strip()
+                    if value:
+                        os.environ.setdefault(key, value)
+
+    dbname = os.environ.get('VT_TEST_DB_NAME', 'veritytick_test') if use_test_db \
+        else os.environ.get('VT_DB_NAME', 'veritytick')
 
     return {
         'host': os.environ.get('VT_DB_HOST', 'localhost'),
         'port': int(os.environ.get('VT_DB_PORT', '5432')),
         'user': os.environ.get('VT_DB_USER', 'postgres'),
         'password': os.environ.get('VT_DB_PASSWORD', ''),
-        'dbname': os.environ.get('VT_DB_NAME', 'veritytick'),
+        'dbname': dbname,
     }
 
 
@@ -61,6 +66,29 @@ def create_database_if_not_exists(params):
     else:
         print(f"Database '{params['dbname']}' already exists.")
 
+    cur.close()
+    conn.close()
+
+
+def drop_database_if_exists(params):
+    """Drop database for clean reset."""
+    conn = get_admin_connection(params)
+    conn.autocommit = True
+    cur = conn.cursor()
+
+    # Terminate active connections first
+    cur.execute("""
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = %s AND pid <> pg_backend_pid()
+    """, (params['dbname'],))
+
+    cur.execute(
+        sql.SQL("DROP DATABASE IF EXISTS {}").format(
+            sql.Identifier(params['dbname'])
+        )
+    )
+    print(f"Database '{params['dbname']}' dropped.")
     cur.close()
     conn.close()
 
@@ -103,7 +131,7 @@ def get_migration_files():
 def extract_version(filepath):
     """Extract version string from filename like V001__description.sql."""
     basename = os.path.basename(filepath)
-    return basename.split('__')[0]  # e.g., "V001"
+    return basename.split('__')[0]
 
 
 def apply_migration(conn, filepath):
@@ -137,50 +165,75 @@ def apply_migration(conn, filepath):
         cur.close()
 
 
-def run_migrations():
-    """Main migration workflow."""
-    params = get_connection_params()
+def seed_database(params):
+    """Apply development seed fixtures."""
+    seed_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        'db', 'seed', 'development_seed.sql'
+    )
+    if not os.path.exists(seed_path):
+        return
 
-    # Step 1: Create database if needed
+    print(f"Seeding '{params['dbname']}' with development fixtures...")
+    conn = psycopg2.connect(**params)
+    cur = conn.cursor()
+    try:
+        with open(seed_path, 'r', encoding='utf-8') as f:
+            seed_sql = f.read()
+        cur.execute(seed_sql)
+        conn.commit()
+        print("Seeding completed successfully.")
+    except Exception as e:
+        conn.rollback()
+        print(f"Seeding note: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+
+def run_setup(use_test_db=False, reset=False, seed=False):
+    """Main workflow: create db, apply migrations, optionally seed."""
+    params = get_connection_params(use_test_db=use_test_db)
+
+    if reset:
+        drop_database_if_exists(params)
+
     create_database_if_not_exists(params)
 
-    # Step 2: Connect to the target database
     conn = psycopg2.connect(**params)
-
     try:
-        # Step 3: Ensure migration tracking table
         ensure_migration_table(conn)
-
-        # Step 4: Find and apply pending migrations
         applied = get_applied_migrations(conn)
         migration_files = get_migration_files()
-
-        if not migration_files:
-            print("No migration files found in db/migrations/")
-            return
 
         pending = [
             f for f in migration_files
             if extract_version(f) not in applied
         ]
 
-        if not pending:
-            print("All migrations already applied.")
-            return
-
-        print(f"Found {len(pending)} pending migration(s):")
-        for filepath in pending:
-            apply_migration(conn, filepath)
-
-        print(f"\nAll {len(pending)} migration(s) applied successfully.")
-
+        if pending:
+            print(f"Found {len(pending)} pending migration(s) for '{params['dbname']}':")
+            for filepath in pending:
+                apply_migration(conn, filepath)
+            print(f"All {len(pending)} migration(s) applied successfully.")
+        else:
+            print(f"All migrations already applied for '{params['dbname']}'.")
     finally:
         conn.close()
 
+    if seed or reset:
+        seed_database(params)
+
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="VerityTick Database Setup")
+    parser.add_argument('--test', action='store_true', help="Operate on test database (veritytick_test)")
+    parser.add_argument('--reset', action='store_true', help="Drop and recreate database from scratch")
+    parser.add_argument('--seed', action='store_true', help="Load development seed data")
+    args = parser.parse_args()
+
     try:
-        run_migrations()
+        run_setup(use_test_db=args.test, reset=args.reset, seed=args.seed)
     except Exception as e:
-        print(f"\nMigration failed: {e}", file=sys.stderr)
+        print(f"\nOperation failed: {e}", file=sys.stderr)
         sys.exit(1)
