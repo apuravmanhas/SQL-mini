@@ -11,7 +11,11 @@ import psycopg2
 
 
 def _load_env():
-    """Load .env file from project root."""
+    """Load .env file from project root.
+
+    Only sets values that are not already in the environment,
+    and skips empty values (so env vars take precedence).
+    """
     env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
     env_path = os.path.abspath(env_path)
     if os.path.exists(env_path):
@@ -20,7 +24,9 @@ def _load_env():
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     key, _, value = line.partition('=')
-                    os.environ.setdefault(key.strip(), value.strip())
+                    key, value = key.strip(), value.strip()
+                    if value:  # skip empty values
+                        os.environ.setdefault(key, value)
 
 
 _load_env()
