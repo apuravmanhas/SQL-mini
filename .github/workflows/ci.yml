@@ -1,0 +1,88 @@
+name: VerityTick CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Database Integrity & Test Suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Database Migrations
+        env:
+          VT_DB_HOST: localhost
+          VT_DB_PORT: 5432
+          VT_DB_USER: postgres
+          VT_DB_PASSWORD: postgres_ci_password
+          VT_DB_NAME: veritytick
+          VT_TEST_DB_NAME: veritytick_test
+        run: |
+          python tools/setup_db.py
+
+      - name: Seed Reference & Development Data
+        env:
+          PGPASSWORD: postgres_ci_password
+        run: |
+          psql -h localhost -U postgres -d veritytick -f db/seed/development_seed.sql
+
+      - name: Execute Full Test Suite
+        env:
+          VT_DB_HOST: localhost
+          VT_DB_PORT: 5432
+          VT_DB_USER: postgres
+          VT_DB_PASSWORD: postgres_ci_password
+          VT_DB_NAME: veritytick
+        run: |
+          pytest tests/ -v
+
+      - name: Execute End-to-End System Demo
+        env:
+          VT_DB_HOST: localhost
+          VT_DB_PORT: 5432
+          VT_DB_USER: postgres
+          VT_DB_PASSWORD: postgres_ci_password
+          VT_DB_NAME: veritytick
+        run: |
+          python tools/demo.py
+
+      - name: Run Benchmark Suite Smoke Test
+        env:
+          VT_DB_HOST: localhost
+          VT_DB_PORT: 5432
+          VT_DB_USER: postgres
+          VT_DB_PASSWORD: postgres_ci_password
+          VT_DB_NAME: veritytick
+        run: |
+          python tools/run_benchmarks.py
