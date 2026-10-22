@@ -12,7 +12,14 @@ Executes a complete lifecycle demonstration:
 """
 
 import os
+import sys
+import argparse
 import psycopg2
+from datetime import datetime, timezone, timedelta
+
+# Add project root to sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from tools.setup_db import run_setup
 
 def load_env():
     env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -39,6 +46,14 @@ ASSET_ACME = 'c0000000-0000-0000-0000-000000000002'
 ASSET_BOLT = 'c0000000-0000-0000-0000-000000000003'
 
 def main():
+    parser = argparse.ArgumentParser(description="VerityTick End-to-End Demonstration")
+    parser.add_argument('--reset', action='store_true', help="Reset and re-seed the database before running demo")
+    args = parser.parse_args()
+
+    if args.reset:
+        print("[*] Reinitializing database with clean schema and seed fixtures...")
+        run_setup(use_test_db=False, reset=True, seed=True)
+
     conn = psycopg2.connect(
         host=os.environ.get('VT_DB_HOST', 'localhost'),
         port=int(os.environ.get('VT_DB_PORT', 5432)),
@@ -52,6 +67,20 @@ def main():
     print("\n" + "=" * 70)
     print(" VERITYTICK — END-TO-END SYSTEM DEMONSTRATION")
     print("=" * 70)
+
+    # 1. Clean up any stale resting orders on the demo market
+    cur.execute("""
+        SELECT order_id FROM trading.orders
+        WHERE market_id = %s AND status IN ('open', 'partially_filled')
+    """, (MARKET_ACME,))
+    for (so_id,) in cur.fetchall():
+        cur.execute("SELECT trading.cancel_order(%s, %s)", (TENANT_APEX, str(so_id)))
+
+    # Record baseline balances
+    cur.execute("SELECT ledger.available_balance(%s, %s)", (ACCT_ALICE, ASSET_ACME))
+    pre_alice_acme = cur.fetchone()[0] or 0
+    cur.execute("SELECT ledger.available_balance(%s, %s)", (ACCT_BOB, ASSET_USDX))
+    pre_bob_usdx = cur.fetchone()[0] or 0
 
     # 1. Double-Entry Deposit
     print("\n[Step 1] Initializing Ledger Balances (Double-Entry Deposit)...")
@@ -85,10 +114,19 @@ def main():
     cur.execute("""
         SELECT trade_id, price, quantity, executed_at
         FROM trading.trades
-        WHERE market_id = %s
+        WHERE (buy_order_id = %s AND sell_order_id = %s)
+           OR (buy_order_id = %s AND sell_order_id = %s)
         ORDER BY executed_at DESC LIMIT 1
-    """, (MARKET_ACME,))
+    """, (r_alice[0], r_bob[0], r_bob[0], r_alice[0]))
     trade = cur.fetchone()
+    if not trade:
+        cur.execute("""
+            SELECT trade_id, price, quantity, executed_at
+            FROM trading.trades
+            WHERE market_id = %s
+            ORDER BY executed_at DESC LIMIT 1
+        """, (MARKET_ACME,))
+        trade = cur.fetchone()
     print(f"  -> Trade Executed at resting price: ${trade[1]} (Qty: {trade[2]}) [ID: {trade[0]}]")
 
     # 3. Post-Trade Ledger Balance
@@ -96,7 +134,9 @@ def main():
     alice_acme = cur.fetchone()[0]
     cur.execute("SELECT ledger.available_balance(%s, %s)", (ACCT_BOB, ASSET_USDX))
     bob_usdx = cur.fetchone()[0]
-    print(f"  -> Settled: Alice received {alice_acme} ACME | Bob received ${bob_usdx} USDX")
+    net_acme = alice_acme - pre_alice_acme
+    net_usdx = bob_usdx - pre_bob_usdx
+    print(f"  -> Settled: Alice received {net_acme} ACME | Bob received ${net_usdx} USDX")
 
     # 4. Tamper-Evident Audit Chain
     print("\n[Step 3] Cryptographic Audit Chain Verification...")

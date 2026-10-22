@@ -13,6 +13,7 @@ for core database workloads:
 import os
 import sys
 import time
+import argparse
 import statistics
 import psycopg2
 
@@ -61,8 +62,21 @@ def compute_stats(latencies_ms):
         'p99_ms': round(p99, 3),
     }
 
+def cleanup_market_orders(conn):
+    """Cancel all open or partially filled orders on the benchmark market."""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT order_id FROM trading.orders
+        WHERE market_id = %s AND status IN ('open', 'partially_filled')
+    """, (MARKET_ACME,))
+    for (so_id,) in cur.fetchall():
+        cur.execute("SELECT trading.cancel_order(%s, %s)", (TENANT_APEX, str(so_id)))
+    conn.commit()
+    cur.close()
+
 def benchmark_order_placement(conn, iterations=100):
     print(f"[*] Running Order Placement benchmark ({iterations} ops)...")
+    cleanup_market_orders(conn)
     cur = conn.cursor()
     # Ensure ample funds for Alice
     cur.execute("SELECT ledger.deposit(%s, %s, %s, %s)",
@@ -101,6 +115,7 @@ def benchmark_order_matching(conn, iterations=100):
         latencies.append((t1 - t0) * 1000.0)
 
     cur.close()
+    cleanup_market_orders(conn)
     return compute_stats(latencies)
 
 def benchmark_balance_lookup(conn, iterations=200):
@@ -154,7 +169,7 @@ def benchmark_candle_refresh(conn, iterations=10):
     cur.close()
     return compute_stats(latencies)
 
-def run_all_benchmarks():
+def run_all_benchmarks(order_count=100):
     print("=" * 60)
     print(" VerityTick Benchmark Suite (PostgreSQL 18)")
     print("=" * 60)
@@ -162,8 +177,8 @@ def run_all_benchmarks():
     conn = get_connection()
     try:
         results = {
-            'Order Placement': benchmark_order_placement(conn, 100),
-            'Order Matching': benchmark_order_matching(conn, 100),
+            'Order Placement': benchmark_order_placement(conn, order_count),
+            'Order Matching': benchmark_order_matching(conn, order_count),
             'Balance Lookup': benchmark_balance_lookup(conn, 200),
             'Fraud Cycle Detection': benchmark_fraud_detection(conn, 10),
             'Candlestick Refresh': benchmark_candle_refresh(conn, 10),
@@ -182,4 +197,7 @@ def run_all_benchmarks():
         conn.close()
 
 if __name__ == '__main__':
-    run_all_benchmarks()
+    parser = argparse.ArgumentParser(description="VerityTick Benchmark Suite")
+    parser.add_argument('--orders', type=int, default=100, help="Number of orders for placement/matching benchmarks")
+    args = parser.parse_args()
+    run_all_benchmarks(order_count=args.orders)
