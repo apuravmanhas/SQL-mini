@@ -1,0 +1,53 @@
+# VerityTick .gitignore
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# PostgreSQL data
+pgdata/
+*.dump
+*.sql.gz
+
+# Benchmark outputs (generated, not committed)
+benchmarks/results/
+*.bench.json
+
+# Generated datasets
+data/generated/
+*.csv.gz
