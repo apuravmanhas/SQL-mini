@@ -26,3 +26,4 @@
 - Benchmark and demo tools (`tools/run_benchmarks.py`, `tools/demo.py`).
 - Automated CI pipeline (`.github/workflows/ci.yml`).
 - Full test suite: **73/73 tests passing**.
+- Automated test suite isolation: Configured `veritytick_test` database provisioning in `tools/setup_db.py` and `tests/conftest.py` so benchmark workloads and interactive demos on `veritytick` run independently without state pollution.
