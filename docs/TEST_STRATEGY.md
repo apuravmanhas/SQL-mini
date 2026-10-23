@@ -1,66 +1,78 @@
 # VerityTick — Test Strategy
 
-## Test Layers
+## Test Architecture
 
-### Layer 1: Schema Validation
-- **What:** Constraints, foreign keys, nullability, uniqueness, migration correctness
-- **How:** SQL tests executed via psycopg2, attempting invalid inserts/updates
-- **Location:** `tests/test_schema.py`
+All automated tests live in the `tests/` directory and run against a dedicated, isolated
+`veritytick_test` database that is automatically provisioned, migrated, and seeded at the
+start of each test session. Each test runs inside a transaction savepoint that rolls back
+after completion, preventing state leakage between tests.
 
-### Layer 2: SQL Function Tests
-- **What:** Direct calls to PL/pgSQL functions, verifying return values and state changes
-- **How:** pytest with psycopg2, each test in a transaction that rolls back
-- **Location:** `tests/test_functions.py`
+## Test Coverage by Module
 
-### Layer 3: Integration Tests
-- **What:** Multi-table operations — order → match → trade → ledger → audit
-- **How:** pytest with real PostgreSQL, deterministic fixtures
-- **Location:** `tests/integration/`
+### Schema Validation (23 tests) — `tests/test_schema.py`
+- Constraints, foreign keys, nullability, uniqueness, tenant ownership enforcement
+- Negative tests: invalid status values, duplicate unique keys, cross-tenant FK mismatches
 
-### Layer 4: Concurrency Tests
-- **What:** Multiple database connections with overlapping transactions
-- **How:** Python threading/multiprocessing with separate psycopg2 connections
-- **Location:** `tests/concurrency/`
+### Order Matching Engine (24 tests) — `tests/test_matching.py`
+- Order validation: rejected for bad market, halted market, wrong tenant, zero price/qty, insufficient balance
+- Matching mechanics: exact match, partial fill, multiple counterparties, no-match scenarios
+- Price-time priority: best price filled first, FIFO at same price, execution at resting price
+- Cancellation: cancel open, cancel partial, cannot cancel filled, cancelled orders excluded from matching
+- Idempotency: duplicate idempotency key rejection
+- Ledger integrity: post-trade balance verification, reservation release on cancel, negative balance prevention
 
-### Layer 5: Security Tests
-- **What:** RLS policies, role restrictions, cross-tenant isolation
-- **How:** Connect as restricted roles, attempt forbidden operations
-- **Location:** `tests/security/`
+### Cryptographic Audit Chain (8 tests) — `tests/test_audit.py`
+- Append event, chain growth, hash linkage between consecutive events
+- Verification of valid chain, tampered event detection, broken link detection
+- External checkpoint export, tenant chain separation
 
-### Layer 6: Recovery Tests
-- **What:** Transaction rollback on failure, state consistency after errors
-- **How:** Inject failures mid-transaction, verify clean rollback
-- **Location:** `tests/recovery/`
+### Fraud Detection (7 tests) — `tests/test_fraud.py`
+- Transfer edge syncing from executed trades
+- Recursive cycle detection: circular trades, no false positives on non-circular trades
+- Depth limit enforcement on recursive CTE traversal
+- Alert generation, idempotency, and evidence payload verification
 
-### Layer 7: Performance Tests
-- **What:** Reproducible benchmarks with measured latency and throughput
-- **How:** Python workload generators with timing instrumentation
-- **Location:** `tests/benchmarks/`
+### Market Data & Candlesticks (5 tests) — `tests/test_market_data.py`
+- Trade tick ingestion and deduplication
+- 1-minute OHLCV candle computation from raw ticks
+- Refresh idempotency (re-running produces same result)
+- Empty period produces no spurious candle
 
-### Layer 8: End-to-End Demo
-- **What:** Complete scenarios from order placement through fraud detection
-- **How:** Scripted demo with visible output
-- **Location:** `tools/demo.py`
-
-## Test Conventions
-
-- Each test uses a fresh transaction that rolls back (unless testing committed state)
-- Deterministic seeds for reproducibility
-- Tests must not depend on prior test execution order
-- Failed tests must produce actionable error messages
-- Skipped tests are explicitly marked with reasons
+### Row-Level Security (6 tests) — `tests/test_security.py`
+- Fail-closed: no rows visible without tenant context
+- Tenant isolation: Apex sees own accounts, Meridian cannot see Apex data
+- Cross-tenant order hiding
+- Ledger immutability: app role cannot UPDATE posted journals or DELETE ledger entries
 
 ## Running Tests
 
 ```bash
-# All tests
+# Full test suite (73 tests, ~2–4 seconds)
 pytest tests/ -v
 
-# Specific layer
-pytest tests/test_schema.py -v
-pytest tests/integration/ -v
-pytest tests/concurrency/ -v
+# Specific module
+pytest tests/test_matching.py -v
+pytest tests/test_audit.py -v
+pytest tests/test_security.py -v
 
-# With coverage
-pytest tests/ --cov=tools --cov-report=term-missing
+# With short traceback
+pytest tests/ --tb=short
 ```
+
+## Test Isolation Mechanism
+
+```
+┌─────────────────────────────────────────────────┐
+│  pytest session start                           │
+│  ├─ conftest.setup_test_database (session)      │
+│  │   └─ run_setup(veritytick_test, reset, seed) │
+│  ├─ db_connection (session) → veritytick_test   │
+│  └─ per-test:                                   │
+│      ├─ SAVEPOINT test_savepoint                │
+│      ├─ test execution                          │
+│      └─ ROLLBACK (to savepoint)                 │
+└─────────────────────────────────────────────────┘
+```
+
+Benchmarks and demos operate on the `veritytick` development database and never interfere
+with the test database.

@@ -26,6 +26,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      VT_DB_HOST: localhost
+      VT_DB_PORT: 5432
+      VT_DB_USER: postgres
+      VT_DB_PASSWORD: postgres_ci_password
+      VT_DB_NAME: veritytick
+      VT_TEST_DB_NAME: veritytick_test
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -40,49 +48,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run Database Migrations
-        env:
-          VT_DB_HOST: localhost
-          VT_DB_PORT: 5432
-          VT_DB_USER: postgres
-          VT_DB_PASSWORD: postgres_ci_password
-          VT_DB_NAME: veritytick
-          VT_TEST_DB_NAME: veritytick_test
+      - name: Create Database, Apply Migrations, and Seed
         run: |
-          python tools/setup_db.py
-
-      - name: Seed Reference & Development Data
-        env:
-          PGPASSWORD: postgres_ci_password
-        run: |
-          psql -h localhost -U postgres -d veritytick -f db/seed/development_seed.sql
+          python tools/setup_db.py --seed
 
       - name: Execute Full Test Suite
-        env:
-          VT_DB_HOST: localhost
-          VT_DB_PORT: 5432
-          VT_DB_USER: postgres
-          VT_DB_PASSWORD: postgres_ci_password
-          VT_DB_NAME: veritytick
         run: |
           pytest tests/ -v
 
       - name: Execute End-to-End System Demo
-        env:
-          VT_DB_HOST: localhost
-          VT_DB_PORT: 5432
-          VT_DB_USER: postgres
-          VT_DB_PASSWORD: postgres_ci_password
-          VT_DB_NAME: veritytick
         run: |
           python tools/demo.py
 
-      - name: Run Benchmark Suite Smoke Test
-        env:
-          VT_DB_HOST: localhost
-          VT_DB_PORT: 5432
-          VT_DB_USER: postgres
-          VT_DB_PASSWORD: postgres_ci_password
-          VT_DB_NAME: veritytick
+      - name: Run Benchmark Suite (Smoke Test)
         run: |
-          python tools/run_benchmarks.py
+          python tools/run_benchmarks.py --orders 20

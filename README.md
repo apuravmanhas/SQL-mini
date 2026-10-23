@@ -75,13 +75,17 @@ python tools/demo.py
 ## Project Structure
 
 ```
+├── .github/workflows/    # CI pipeline (GitHub Actions)
 ├── db/
-│   ├── migrations/       # Versioned SQL migrations
-│   ├── seed/             # Development fixtures
-│   └── tests/            # SQL-level tests
-├── tools/                # Python utilities
-├── tests/                # Integration & concurrency tests
-└── docs/                 # Architecture, decisions, status
+│   ├── migrations/       # Versioned SQL migrations (V001–V011)
+│   └── seed/             # Development seed fixtures
+├── docs/                 # Architecture specs, ADRs, status
+│   └── adr/              # Architectural Decision Records
+├── tests/                # Automated test suite (73 tests)
+├── tools/                # CLI utilities (setup, demo, benchmarks)
+├── .env.example          # Environment variable template
+├── pyproject.toml        # Python project configuration
+└── README.md
 ```
 
 ## Current Status
