@@ -96,6 +96,15 @@ See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for detailed implementation
 
 See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
+## Contributors
+
+| Contributor | Role |
+|---|---|
+| **[Apurav Manhas (@apuravmanhas)](https://github.com/apuravmanhas)** | Project Lead & Systems Architecture |
+| **[Claude (@claude)](https://github.com/claude)** (Anthropic) | AI Pair Programmer — Schema Design & SQL Engineering |
+| **[Gemini (@gemini-code-assist)](https://github.com/gemini-code-assist)** (Google DeepMind) | AI Pair Programmer — Security Hardening, Audit Verification & Concurrency Testing |
+| **[OpenAI / ChatGPT (@openai)](https://github.com/openai)** (OpenAI) | AI Pair Programmer — Architecture Review & Documentation |
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
