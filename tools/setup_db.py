@@ -13,7 +13,7 @@ import psycopg2
 from psycopg2 import sql
 
 
-def get_connection_params(use_test_db=False):
+def get_connection_params(use_test_db=False, dbname=None):
     """Read connection parameters from environment or .env file."""
     env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
     if os.path.exists(env_path):
@@ -26,8 +26,9 @@ def get_connection_params(use_test_db=False):
                     if value:
                         os.environ.setdefault(key, value)
 
-    dbname = os.environ.get('VT_TEST_DB_NAME', 'veritytick_test') if use_test_db \
-        else os.environ.get('VT_DB_NAME', 'veritytick')
+    if dbname is None:
+        dbname = os.environ.get('VT_TEST_DB_NAME', 'veritytick_test') if use_test_db \
+            else os.environ.get('VT_DB_NAME', 'veritytick')
 
     return {
         'host': os.environ.get('VT_DB_HOST', 'localhost'),
@@ -191,9 +192,13 @@ def seed_database(params):
         conn.close()
 
 
-def run_setup(use_test_db=False, reset=False, seed=False):
-    """Main workflow: create db, apply migrations, optionally seed."""
-    params = get_connection_params(use_test_db=use_test_db)
+def run_setup(use_test_db=False, reset=False, seed=False, dbname=None):
+    """Main workflow: create db, apply migrations, optionally seed.
+
+    dbname overrides the configured database name, which lets tests that need
+    committed data work in a throwaway database.
+    """
+    params = get_connection_params(use_test_db=use_test_db, dbname=dbname)
 
     if reset:
         drop_database_if_exists(params)

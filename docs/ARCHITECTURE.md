@@ -35,12 +35,12 @@ flowchart TD
 
 | Schema | Responsibility | Key Tables & Interfaces |
 |---|---|---|
-| `core` | Multi-tenant definitions, users, assets, market parameters, priority sequences | `tenants`, `users`, `assets`, `markets`, `trading_accounts` |
+| `core` | Multi-tenant definitions, users, assets, market parameters, priority sequences, tenant context guard | `tenants`, `users`, `assets`, `markets`, `trading_accounts`, `assert_tenant_access()` |
 | `trading` | Limit order book, execution events, trade settlements, matching engine | `orders`, `order_events`, `trades`, `place_order()`, `cancel_order()` |
-| `ledger` | Double-entry accounting, immutable journals, balanced transfer legs | `accounts`, `journals`, `entries`, `post_transfer()`, `available_balance()` |
+| `ledger` | Double-entry accounting, immutable journals, balanced transfer legs, reconciliation | `accounts`, `journals`, `entries`, `post_transfer()`, `available_balance()`, `reconcile_balances()`, `check_conservation()` |
 | `audit` | Cryptographic SHA-256 hash-chained event trail, checkpoint verification | `chain_state`, `events`, `append_event()`, `verify_chain()`, `export_checkpoint()` |
 | `risk` | Materialized transfer graph, recursive cycle analysis, alert generation | `transfer_edges`, `alerts`, `detect_cycles()`, `generate_alerts()` |
-| `market_data` | Time-series tick ingestion, range partitioning, OHLCV rollups | `ticks` (partitioned), `candles_1m`, `candles_5m`, `candles_1h`, `refresh_candles()` |
+| `market_data` | Time-series tick ingestion, dynamic range partitioning, OHLCV rollups | `ticks` (partitioned), `candles_1m`, `candles_5m`, `candles_1h`, `ensure_tick_partition()`, `refresh_candles()` |
 
 ## 3. Concurrency & Transactional Invariants
 

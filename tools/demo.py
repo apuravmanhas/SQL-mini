@@ -65,7 +65,7 @@ def main():
     cur = conn.cursor()
 
     print("\n" + "=" * 70)
-    print(" VERITYTICK — END-TO-END SYSTEM DEMONSTRATION")
+    print(" VERITYTICK - END-TO-END SYSTEM DEMONSTRATION")
     print("=" * 70)
 
     # 1. Clean up any stale resting orders on the demo market
@@ -137,6 +137,11 @@ def main():
     net_acme = alice_acme - pre_alice_acme
     net_usdx = bob_usdx - pre_bob_usdx
     print(f"  -> Settled: Alice received {net_acme} ACME | Bob received ${net_usdx} USDX")
+    cur.execute("SELECT COUNT(*) FROM ledger.reconcile_balances(%s)", (TENANT_APEX,))
+    mismatches = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM ledger.check_conservation()")
+    unconserved = cur.fetchone()[0]
+    print(f"  -> Ledger Reconciliation: {mismatches} balance mismatches | {unconserved} conservation errors")
 
     # 4. Tamper-Evident Audit Chain
     print("\n[Step 3] Cryptographic Audit Chain Verification...")

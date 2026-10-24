@@ -44,16 +44,36 @@ after completion, preventing state leakage between tests.
 - Cross-tenant order hiding
 - Ledger immutability: app role cannot UPDATE posted journals or DELETE ledger entries
 
+### Privilege Hardening, Audit Wiring & Reconciliation (34 tests) — `tests/test_hardening.py`
+- `vt_app` execution boundary: `vt_app` can call `trading.place_order`, `trading.cancel_order`, and `audit.append_event` for its active tenant, and is rejected on cross-tenant or unset-tenant calls
+- Direct table write revocation: `vt_app` cannot directly `INSERT`/`UPDATE`/`DELETE` on `trading.orders`, `trading.trades`, `ledger.accounts`, `ledger.journals`, `ledger.entries`, `audit.events`, `audit.chain_state`, `risk.transfer_edges`, or `market_data` tables
+- Operator function revocation: `vt_app` cannot call `ledger.deposit`, `ledger.post_transfer`, `risk.sync_trade_edges`, `risk.generate_alerts`, `market_data.ingest_trade_tick`, `market_data.refresh_candles`, or `*_core` internal functions
+- Automatic audit chain wiring: placing, rejecting, and cancelling orders automatically append cryptographic hash-chained events (`order_placed`, `order_rejected`, `order_cancelled`) verified by `audit.verify_chain`
+- Self-trade prevention: crossing one's own resting order returns `status = 'rejected'` and logs `order_rejected` without crashing or altering the resting order
+- Independent ledger reconciliation: `ledger.reconcile_balances()` detects balance drift and `ledger.check_conservation()` verifies zero-sum asset conservation across all accounts
+- Dynamic tick partitioning: `market_data.ingest_trade_tick` automatically provisions future/past monthly partitions via `market_data.ensure_tick_partition`
+- Complete RLS coverage on `audit.chain_state` and `risk.transfer_edges`
+
+### Multi-Threaded Concurrency (7 tests) — `tests/test_concurrency.py`
+- Resting order race: 2 concurrent threads competing for a single 10-share resting order result in exactly 10 shares filled, zero negative balances, and reconciled ledger state
+- 8-thread 200-order concurrent storm: random buy/sell orders across 4 accounts verified for:
+  - Ledger balance reconciliation (`ledger.reconcile_balances()`)
+  - Asset conservation across all accounts (`ledger.check_conservation()`)
+  - Exact reservation matching against open order remaining quantities
+  - Valid trade execution prices within buyer/seller limit bounds
+  - Uncrossed final order book (`best_bid < best_ask`)
+  - Intact SHA-256 audit hash chain under concurrent appends (`audit.verify_chain()`)
+
 ## Running Tests
 
 ```bash
-# Full test suite (73 tests, ~2–4 seconds)
+# Full test suite (114 tests, ~11 seconds)
 pytest tests/ -v
 
 # Specific module
 pytest tests/test_matching.py -v
-pytest tests/test_audit.py -v
-pytest tests/test_security.py -v
+pytest tests/test_hardening.py -v
+pytest tests/test_concurrency.py -v
 
 # With short traceback
 pytest tests/ --tb=short

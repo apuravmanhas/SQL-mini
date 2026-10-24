@@ -9,7 +9,7 @@
 3. **Double-Entry Balance Equation:**
    Every financial transfer leg consists of balanced debit and credit movements:
    $$\sum \Delta \text{Balance}_{\text{debit}} = \sum \Delta \text{Balance}_{\text{credit}}$$
-   Available balance is maintained and verifiable against historical journal entries.
+   Current balances on `ledger.accounts` are independently verifiable against historical `ledger.entries` via `ledger.reconcile_balances()` and zero-sum conservation is verifiable via `ledger.check_conservation()`.
 
 ## 2. Entity-Relationship Summary
 
@@ -35,6 +35,7 @@ erDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> open : Validated & Reserved
+    [*] --> rejected : Validation / Self-Trade Rejected
     open --> partially_filled : Matched Partial Qty
     partially_filled --> filled : Remaining Qty = 0
     open --> filled : Matched Full Qty
@@ -42,4 +43,5 @@ stateDiagram-v2
     partially_filled --> cancelled : Client Cancel Remaining
     filled --> [*]
     cancelled --> [*]
+    rejected --> [*]
 ```

@@ -77,11 +77,11 @@ python tools/demo.py
 ```
 ├── .github/workflows/    # CI pipeline (GitHub Actions)
 ├── db/
-│   ├── migrations/       # Versioned SQL migrations (V001–V011)
+│   ├── migrations/       # Versioned SQL migrations (V001–V013)
 │   └── seed/             # Development seed fixtures
 ├── docs/                 # Architecture specs, ADRs, status
 │   └── adr/              # Architectural Decision Records
-├── tests/                # Automated test suite (73 tests)
+├── tests/                # Automated test suite (114 tests)
 ├── tools/                # CLI utilities (setup, demo, benchmarks)
 ├── .env.example          # Environment variable template
 ├── pyproject.toml        # Python project configuration
