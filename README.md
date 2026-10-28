@@ -1,5 +1,8 @@
 # VerityTick
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/apuravmanhas/badge.svg)](https://hub.xerj.org/contributors/apuravmanhas)
+[![VerityTick CI](https://github.com/apuravmanhas/SQL-mini/actions/workflows/ci.yml/badge.svg)](https://github.com/apuravmanhas/SQL-mini/actions)
+
 **PostgreSQL Market Integrity, Transactional Trading & Fraud Analytics Engine**
 
 *Every order accounted for. Every ledger movement balanced. Every suspicious pattern explainable. Every performance claim measurable.*
